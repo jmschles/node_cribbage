@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+
+<head>
+  <script src="/jquery-1.11.0.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="game.js"></script>
+  <title>CrappyCribbage</title>
+</head>
+<body>
+  <div id="left" style="float:left;width:400px;height:300px">
+    <h1>
+      Welcome to the lobby
+    </h1>
+    <p id="welcome">
+    </p>
+    <p id="nameEntry">
+      Enter your name:
+      <input type="text" id="player">
+      <input type="button" id="setName" value="Ready!">
+    </p>
+    <button id="deal">Deal hand</button>
+    <div id="hand" style="padding:4px;border:1px solid #888"></div>
+    <div id="crib">0 cards in crib</div>
+    <div id="remainingCards"></div>
+    <div id="flipCard"></div>
+  </div>
+  <div id="right" style="float:left;width:200px;height:300px">
+    <div id="scores">
+      <p font-size='1.3em'><strong>Scores</strong></p>
+      <div id="score1"></div>
+      <div id="score2"></div>
+      <div id="cribscore"></div>
+    </div>
+  </div>
+  <div id="scoresBreakdown" style="float:left;width:100%;height:200px">
+    <div style="width:100%"><strong>Scores Breakdown</strong></div>
+  </div>
+</body>
+
+<script>
+  var socket = io.connect("http://localhost:3001", {
+    'sync disconnect on unload': true
+  });
+
+  $("#deal").attr("disabled", "disabled");
+  $("#crib").hide();
+  $("#remainingCards").hide();
+  $("#hand").hide();
+  $("#scores").hide();
+  $("#scoresBreakdown").hide();
+
+  $('#hand').on('click', 'span', function(event) {
+    socket.emit('sendToCrib', $(this).prop('id'));
+  });
+
+  $("#setName").click(function() {
+    if ($("#player").val() === "") {
+      return false;
+    }
+    var playerName = $("#player").val()
+    socket.emit('addPlayer', playerName);
+    $("#nameEntry").hide();
+    $("#welcome").text("Welcome, " + playerName + "!");
+    $("#welcome").show();
+    $("#deal").removeAttr("disabled");
+  });
+
+  socket.on('showCrib', function(crib) {
+    var cribDiv = $('#crib');
+    cribDiv.hide();
+    cribDiv.text("Crib contents: ");
+    $.each(crib, function(i, card) {
+      var span = "<span>" + card.type + card.suit + "</span> ";
+      cribDiv.append(span);
+    });
+    cribDiv.show();
+  });
+
+  socket.on('remainingCards', function(numCards) {
+    $('#remainingCards').text("Remaining cards: " + numCards);
+  });
+
+  socket.on('showScores', function(scoresObj) {
+    var scoreKeys = Object.keys(scoresObj);
+    $('#score1').html(scoreKeys[0] + ": " + scoresObj[scoreKeys[0]]);
+    $('#score2').html(scoreKeys[1] + ": " + scoresObj[scoreKeys[1]]);
+    $('#cribscore').html(scoreKeys[2] + ": " + scoresObj[scoreKeys[2]]);
+    $('#scores').show();
+  });
+
+  socket.on('showScoresBreakdown', function(breakdown) {
+    for (var hand in breakdown) {
+      var $newDiv = $("<div></div>");
+      $newDiv.attr('style', 'height:200px;width:200px;float:left');
+      $nameTag = $("<p></p>");
+      $nameTag.text(hand);
+      $nameTag.attr('font-weight', 'bold');
+      $newDiv.append($nameTag);
+      var cardsString = "";
+      for (var i = 0; i < breakdown[hand]['cards'].length; i++) {
+        cardsString += (breakdown[hand]['cards'][i].type + breakdown[hand]['cards'][i].suit + " ");
+      }
+      $newDiv.append(cardsString + '<br />');
+      if(breakdown[hand]['nobScore'] > 0) {
+        $newDiv.append('His nobs: ' + breakdown[hand]['nobScore'] + '<br />');
+      }
+      if(breakdown[hand]['flushScore'] > 0) {
+        $newDiv.append('Flush: ' + breakdown[hand]['flushScore'] + '<br />');  
+      }
+      if(breakdown[hand]['pairScore'] > 0) {
+        $newDiv.append('Pairs: ' + breakdown[hand]['pairScore'] + '<br />');  
+      }
+      if(breakdown[hand]['fifteenScore'] > 0) {
+        $newDiv.append('Fifteens: ' + breakdown[hand]['fifteenScore'] + '<br />');  
+      }
+      if(breakdown[hand]['runScore'] > 0) {
+        $newDiv.append('Runs: ' + breakdown[hand]['runScore'] + '<br />');  
+      }
+      $('#scoresBreakdown').append($newDiv);
+    }
+    $('#scoresBreakdown').show();
+  });
+
+  socket.on('showCards', function(cards) {
+    $("#hand").show();
+    $("#deal").attr("disabled", "disabled");
+    $("#remainingCards").show();
+    $('#hand').html("");
+    $.each(cards, function(i, card) {
+      var span = "<span class='card' id='" + i + "'>" + card.type + card.suit + "</span> ";
+      $('#hand').append(span);
+    });
+  });
+
+  socket.on('updateCrib', function(crib) {
+    $('#crib').text("");
+    $('#crib').text(crib.cards.length.toString() + " cards in crib");
+  });
+
+  socket.on('showFlipCard', function(flipCard) {
+    $('#flipCard').text("Flip card: " + flipCard.type + flipCard.suit);
+  });
+
+  $("#deal").click(function() {
+    console.log("Dealing hand...");
+    $("#crib").show();
+    socket.emit('dealCards');
+  });
+
+</script>
